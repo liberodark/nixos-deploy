@@ -5,6 +5,10 @@ TEMPLATE="/var/lib/pve/local-btrfs/template/cache/nixos-24.05-default_20241108_a
 STORAGE="local-btrfs"
 BRIDGE="vmbr0"
 DEFAULT_GATEWAY="192.168.0.1"
+DEFAULT_PRIVILEGED=1
+DEFAULT_CORES=2
+DEFAULT_MEMORY=1024
+DEFAULT_DISK=8
 
 # Logging function
 log() {
@@ -109,11 +113,13 @@ create_container() {
     local HOSTNAME=$2
     local IP=$3
     local GATEWAY=${4:-$DEFAULT_GATEWAY}
-    local CORES=${5:-2}
-    local MEMORY=${6:-2048}
-    local DISK=${7:-8}
+    local CORES=${5:-$DEFAULT_CORES}
+    local MEMORY=${6:-$DEFAULT_MEMORY}
+    local DISK=${7:-$DEFAULT_DISK}
+    local PRIVILEGED=${8:-$DEFAULT_PRIVILEGED}
 
     log "Creating container $HOSTNAME (ID: $CT_ID)..."
+    log "Configuration: Cores=$CORES, Memory=$MEMORY MB, Disk=$DISK GB, Privileged=$PRIVILEGED"
 
     # Check if the container already exists
     if pct status $CT_ID >/dev/null 2>&1; then
@@ -131,7 +137,7 @@ create_container() {
         --memory $MEMORY \
         --rootfs $STORAGE:$DISK \
         --net0 "name=eth0,bridge=$BRIDGE" \
-        --unprivileged 1 \
+        --unprivileged $([[ $PRIVILEGED == 1 ]] && echo "0" || echo "1") \
         --features nesting=1 \
         --force 1
     check_error "Failed to create container"
@@ -166,6 +172,7 @@ deploy_cluster() {
     local COUNT=$2
     local BASE_IP=$3
     local GATEWAY=${4:-$DEFAULT_GATEWAY}
+    local PRIVILEGED=${5:-$DEFAULT_PRIVILEGED}
 
     log "Deploying a cluster of $COUNT containers..."
     
@@ -202,7 +209,7 @@ deploy_cluster() {
         local HOSTNAME="nixos-node-$i"
         local IP="$BASE_ADDR.$NEW_OCTET/$PREFIX"
         
-        create_container $CT_ID $HOSTNAME $IP $GATEWAY
+        create_container $CT_ID $HOSTNAME $IP $GATEWAY $DEFAULT_CORES $DEFAULT_MEMORY $DEFAULT_DISK $PRIVILEGED
     done
 
     log "Cluster deployment completed successfully."
@@ -243,17 +250,19 @@ cleanup_containers() {
 case "$1" in
     "create")
         if [ "$#" -lt 4 ]; then
-            echo "Usage: $0 create <ct_id> <hostname> <ip> [gateway] [cores] [memory] [disk]"
+            echo "Usage: $0 create <ct_id> <hostname> <ip> [gateway] [cores] [memory] [disk] [privileged]"
+            echo "Note: Default values are: cores=$DEFAULT_CORES, memory=$DEFAULT_MEMORY MB, disk=$DEFAULT_DISK GB, privileged=yes"
             exit 1
         fi
-        create_container "$2" "$3" "$4" "${5:-$DEFAULT_GATEWAY}" "${6:-2}" "${7:-2048}" "${8:-8}"
+        create_container "$2" "$3" "$4" "${5:-$DEFAULT_GATEWAY}" "${6:-$DEFAULT_CORES}" "${7:-$DEFAULT_MEMORY}" "${8:-$DEFAULT_DISK}" "${9:-$DEFAULT_PRIVILEGED}"
         ;;
     "deploy-cluster")
         if [ "$#" -lt 4 ]; then
-            echo "Usage: $0 deploy-cluster <base_id> <count> <base_ip> [gateway]"
+            echo "Usage: $0 deploy-cluster <base_id> <count> <base_ip> [gateway] [privileged]"
+            echo "Note: Containers are created with: cores=$DEFAULT_CORES, memory=$DEFAULT_MEMORY MB, disk=$DEFAULT_DISK GB"
             exit 1
         fi
-        deploy_cluster "$2" "$3" "$4" "${5:-$DEFAULT_GATEWAY}"
+        deploy_cluster "$2" "$3" "$4" "${5:-$DEFAULT_GATEWAY}" "${6:-$DEFAULT_PRIVILEGED}"
         ;;
     "check")
         if [ "$#" -lt 3 ]; then
@@ -271,17 +280,26 @@ case "$1" in
         ;;
     *)
         echo "Usage:"
-        echo "  $0 create <ct_id> <hostname> <ip> [gateway] [cores] [memory] [disk]"
-        echo "  $0 deploy-cluster <base_id> <count> <base_ip> [gateway]"
+        echo "  $0 create <ct_id> <hostname> <ip> [gateway] [cores] [memory] [disk] [privileged]"
+        echo "  $0 deploy-cluster <base_id> <count> <base_ip> [gateway] [privileged]"
         echo "  $0 check <base_id> <count>"
         echo "  $0 cleanup <base_id> <count>"
+        echo ""
+        echo "Default values:"
+        echo "  - Cores: $DEFAULT_CORES"
+        echo "  - Memory: $DEFAULT_MEMORY MB"
+        echo "  - Disk: $DEFAULT_DISK GB"
+        echo "  - Gateway: $DEFAULT_GATEWAY"
+        echo "  - Privileged: yes (use privileged=0 for unprivileged)"
         echo ""
         echo "Examples:"
         echo "  $0 create 100 nixos-test 192.168.0.100/24"
         echo "  $0 create 100 nixos-test 192.168.0.100/24 192.168.0.1"
         echo "  $0 create 100 nixos-test 192.168.0.100/24 192.168.0.1 4 4096 16"
+        echo "  $0 create 100 nixos-test 192.168.0.100/24 192.168.0.1 4 4096 16 0  # Unprivileged"
         echo "  $0 deploy-cluster 100 3 192.168.0.100/24"
         echo "  $0 deploy-cluster 100 3 192.168.0.100/24 192.168.0.1"
+        echo "  $0 deploy-cluster 100 3 192.168.0.100/24 192.168.0.1 0  # Unprivileged"
         echo "  $0 check 100 3"
         echo "  $0 cleanup 100 3"
         exit 1
