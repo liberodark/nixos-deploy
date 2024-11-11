@@ -57,6 +57,9 @@ generate_nixos_config() {
 
   boot.isContainer = true;
 
+  # Disable swap
+  swapDevices = [];
+
   # Remove systemd units incompatible with LXC
   systemd.suppressedSystemUnits = [
     "dev-mqueue.mount"
@@ -135,6 +138,7 @@ create_container() {
         --hostname $HOSTNAME \
         --cores $CORES \
         --memory $MEMORY \
+        --swap 0 \
         --rootfs $STORAGE:$DISK \
         --net0 "name=eth0,bridge=$BRIDGE" \
         --unprivileged $([[ $PRIVILEGED == 1 ]] && echo "0" || echo "1") \
