@@ -63,6 +63,7 @@ generate_nixos_config() {
   # Network configuration with static IP
   networking = {
     hostName = "$HOSTNAME";
+    dhcpcd.enable = false;
     useHostResolvConf = false;
     nameservers = [ "8.8.8.8" "1.1.1.1" ];
     defaultGateway = "$GATEWAY";
