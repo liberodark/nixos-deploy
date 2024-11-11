@@ -4,6 +4,7 @@
 TEMPLATE="/var/lib/pve/local-btrfs/template/cache/nixos-24.05-default_20241108_amd64.tar.xz"
 STORAGE="local-btrfs"
 BRIDGE="vmbr0"
+DEFAULT_GATEWAY="192.168.0.1"
 
 # Logging function
 log() {
@@ -18,11 +19,29 @@ check_error() {
     fi
 }
 
+# Function to wait for container to be running
+wait_for_container() {
+    local CT_ID=$1
+    local max_attempts=30
+    local attempt=1
+
+    while [ $attempt -le $max_attempts ]; do
+        if pct status $CT_ID 2>/dev/null | grep -q "status: running"; then
+            return 0
+        fi
+        sleep 1
+        attempt=$((attempt + 1))
+    done
+    
+    return 1
+}
+
 # Function to generate NixOS configuration
 generate_nixos_config() {
     local HOSTNAME=$1
     local IP=${2%/*}  # Removes /24 from the IP
     local PREFIX=${2#*/}  # Gets the prefix after /
+    local GATEWAY=${3:-$DEFAULT_GATEWAY}
 
     cat << EOF
 { modulesPath, config, pkgs, ... }:
@@ -46,7 +65,7 @@ generate_nixos_config() {
     hostName = "$HOSTNAME";
     useHostResolvConf = false;
     nameservers = [ "8.8.8.8" "1.1.1.1" ];
-    defaultGateway = "192.168.0.1";
+    defaultGateway = "$GATEWAY";
     
     # eth0 interface configuration
     interfaces.eth0 = {
@@ -88,9 +107,10 @@ create_container() {
     local CT_ID=$1
     local HOSTNAME=$2
     local IP=$3
-    local CORES=${4:-2}
-    local MEMORY=${5:-2048}
-    local DISK=${6:-8}
+    local GATEWAY=${4:-$DEFAULT_GATEWAY}
+    local CORES=${5:-2}
+    local MEMORY=${6:-2048}
+    local DISK=${7:-8}
 
     log "Creating container $HOSTNAME (ID: $CT_ID)..."
 
@@ -120,13 +140,16 @@ create_container() {
     pct start $CT_ID
     check_error "Failed to start the container"
 
-    # Wait for the system to be ready
-    log "Waiting for startup..."
-    sleep 15
+    # Wait for the container to be running
+    log "Waiting for container to be running..."
+    if ! wait_for_container $CT_ID; then
+        log "ERROR: Container failed to start properly"
+        exit 1
+    fi
 
     # Create NixOS configuration in the container
     log "Creating NixOS configuration..."
-    generate_nixos_config "$HOSTNAME" "$IP" | pct exec $CT_ID -- /run/current-system/sw/bin/tee /etc/nixos/configuration.nix > /dev/null 2>&1
+    generate_nixos_config "$HOSTNAME" "$IP" "$GATEWAY" | pct exec $CT_ID -- /run/current-system/sw/bin/tee /etc/nixos/configuration.nix > /dev/null 2>&1
     check_error "Failed to create configuration file"
 
     # Run nixos-rebuild
@@ -141,6 +164,7 @@ deploy_cluster() {
     local BASE_ID=$1
     local COUNT=$2
     local BASE_IP=$3
+    local GATEWAY=${4:-$DEFAULT_GATEWAY}
 
     log "Deploying a cluster of $COUNT containers..."
     
@@ -177,7 +201,7 @@ deploy_cluster() {
         local HOSTNAME="nixos-node-$i"
         local IP="$BASE_ADDR.$NEW_OCTET/$PREFIX"
         
-        create_container $CT_ID $HOSTNAME $IP
+        create_container $CT_ID $HOSTNAME $IP $GATEWAY
     done
 
     log "Cluster deployment completed successfully."
@@ -218,42 +242,45 @@ cleanup_containers() {
 case "$1" in
     "create")
         if [ "$#" -lt 4 ]; then
-            echo "Usage: $0 create <ct_id> <hostname> <ip>"
+            echo "Usage: $0 create <ct_id> <hostname> <ip> [gateway] [cores] [memory] [disk]"
             exit 1
         fi
-        create_container $2 $3 $4
+        create_container "$2" "$3" "$4" "${5:-$DEFAULT_GATEWAY}" "${6:-2}" "${7:-2048}" "${8:-8}"
         ;;
     "deploy-cluster")
         if [ "$#" -lt 4 ]; then
-            echo "Usage: $0 deploy-cluster <base_id> <count> <base_ip>"
+            echo "Usage: $0 deploy-cluster <base_id> <count> <base_ip> [gateway]"
             exit 1
         fi
-        deploy_cluster $2 $3 $4
+        deploy_cluster "$2" "$3" "$4" "${5:-$DEFAULT_GATEWAY}"
         ;;
     "check")
         if [ "$#" -lt 3 ]; then
             echo "Usage: $0 check <base_id> <count>"
             exit 1
         fi
-        check_containers $2 $3
+        check_containers "$2" "$3"
         ;;
     "cleanup")
         if [ "$#" -lt 3 ]; then
             echo "Usage: $0 cleanup <base_id> <count>"
             exit 1
         fi
-        cleanup_containers $2 $3
+        cleanup_containers "$2" "$3"
         ;;
     *)
         echo "Usage:"
-        echo "  $0 create <ct_id> <hostname> <ip>"
-        echo "  $0 deploy-cluster <base_id> <count> <base_ip>"
+        echo "  $0 create <ct_id> <hostname> <ip> [gateway] [cores] [memory] [disk]"
+        echo "  $0 deploy-cluster <base_id> <count> <base_ip> [gateway]"
         echo "  $0 check <base_id> <count>"
         echo "  $0 cleanup <base_id> <count>"
         echo ""
         echo "Examples:"
         echo "  $0 create 100 nixos-test 192.168.0.100/24"
+        echo "  $0 create 100 nixos-test 192.168.0.100/24 192.168.0.1"
+        echo "  $0 create 100 nixos-test 192.168.0.100/24 192.168.0.1 4 4096 16"
         echo "  $0 deploy-cluster 100 3 192.168.0.100/24"
+        echo "  $0 deploy-cluster 100 3 192.168.0.100/24 192.168.0.1"
         echo "  $0 check 100 3"
         echo "  $0 cleanup 100 3"
         exit 1
