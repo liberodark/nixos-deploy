@@ -5,6 +5,7 @@ TEMPLATE="/var/lib/pve/local-btrfs/template/cache/nixos-24.05-default_20241108_a
 STORAGE="local-btrfs"
 BRIDGE="vmbr0"
 DEFAULT_GATEWAY="192.168.0.1"
+DEFAULT_DNS="1.1.1.1"
 DEFAULT_PRIVILEGED=1
 DEFAULT_CORES=2
 DEFAULT_MEMORY=1024
@@ -71,8 +72,9 @@ generate_nixos_config() {
   networking = {
     hostName = "$HOSTNAME";
     dhcpcd.enable = false;
+    enableIPv6 = false;
     useHostResolvConf = false;
-    nameservers = [ "8.8.8.8" "1.1.1.1" ];
+    nameservers = [ "'$DEFAULT_DNS'" ];
     defaultGateway = "$GATEWAY";
     
     # eth0 interface configuration
@@ -162,6 +164,14 @@ create_container() {
     log "Creating NixOS configuration..."
     generate_nixos_config "$HOSTNAME" "$IP" "$GATEWAY" | pct exec $CT_ID -- /run/current-system/sw/bin/tee /etc/nixos/configuration.nix > /dev/null 2>&1
     check_error "Failed to create configuration file"
+
+    # Apply Network Configuration
+    log "Applying Network configuration..."
+    pct exec $CT_ID -- /run/current-system/sw/bin/su -c "ip link set eth0 up" root
+    pct exec $CT_ID -- /run/current-system/sw/bin/su -c "ip addr add $IP dev eth0" root
+    pct exec $CT_ID -- /run/current-system/sw/bin/su -c "ip route add default via $GATEWAY" root
+    pct exec $CT_ID -- /run/current-system/sw/bin/su -c "echo 'nameserver $DEFAULT_DNS' > /etc/resolv.conf" root
+    check_error "Network configuration Failed"
 
     # Run nixos-rebuild
     log "Applying NixOS configuration..."
