@@ -1,7 +1,7 @@
 VMA_PATH="/var/lib/pve/local-btrfs/dump/vzdump-qemu-nixos-24.11beta708443.057f63b6dc1a.vma.zst"
 STORAGE="local-btrfs"
-DEFAULT_CORES=4
-DEFAULT_MEMORY=4096
+DEFAULT_CORES=2
+DEFAULT_MEMORY=2048
 DEFAULT_BRIDGE="vmbr0"
 DEFAULT_GATEWAY="192.168.0.1"
 DEFAULT_DNS="1.1.1.1"
