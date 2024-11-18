@@ -8,7 +8,7 @@ DEFAULT_MEMORY=2048
 DEFAULT_BRIDGE="vmbr0"
 DEFAULT_GATEWAY="192.168.0.1"
 DEFAULT_DNS="1.1.1.1"
-DEFAULT_DISK_SIZE="32G"
+DEFAULT_DISK_SIZE="8G"
 
 generate_mac() {
     printf '52:54:00:%02X:%02X:%02X\n' $((RANDOM%256)) $((RANDOM%256)) $((RANDOM%256))
@@ -49,6 +49,11 @@ restore_vm() {
     log "Resizing disk..."
     qm resize $VM_ID virtio0 $DISK_SIZE
     check_error "Failed to resize disk"
+
+    log "Setting boot order and disk configuration..."
+    qm set $VM_ID \
+        --boot order=virtio0
+    check_error "Failed to set boot order"
 
     log "Configuring VM..."
     qm set $VM_ID \
