@@ -13,13 +13,16 @@ Deploy NixOS in PVE
 ### Create Your Own Template
 
 Edit vm-config.nix :
+
 `nano vm-config.nix`
 
 Build your Template
+
 ```
 nix run github:nix-community/nixos-generators -- --format proxmox \
                   --configuration vm-config.nix
 ```
 
 Upload Your Template
+
 `/var/lib/pve/PVE_STORAGE/dump/`
