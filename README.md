@@ -10,6 +10,8 @@ Deploy NixOS in PVE
 ### Create VM with ID 120
 `bash deploy_vma.sh restore 120 nixos 192.168.0.198/24 192.168.0.1`
 
+user : `nixos` pwd : `nixos`
+
 ### Create Your Own Template
 
 Edit vm-config.nix :
