@@ -27,4 +27,6 @@ nix run github:nix-community/nixos-generators -- --format proxmox \
 
 Upload Your Template
 
+`/var/lib/vz/dump/` 
+or
 `/var/lib/pve/PVE_STORAGE/dump/`
