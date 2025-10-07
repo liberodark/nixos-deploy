@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Default configuration
-TEMPLATE="/var/lib/pve/local-btrfs/template/cache/nixos-24.05-default_20241108_amd64.tar.xz"
+TEMPLATE="/var/lib/pve/local-btrfs/template/cache/nixos-25.05-default_20251007_amd64.tar.xz"
 STORAGE="local-btrfs"
 BRIDGE="vmbr0"
 DEFAULT_GATEWAY="192.168.0.1"
@@ -89,11 +89,15 @@ generate_nixos_config() {
     };
   };
 
+  users.users.root.openssh.authorizedKeys.keys = [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQ5hBVVKK72ZX+n+BVnPocx+AG5u6ht8bM++G1lhufp liberodark@gmail.com"
+  ];
+
   # Basic services
   services.openssh = {
     enable = true;
     settings = {
-      PasswordAuthentication = true;
+      PasswordAuthentication = false;
       PermitRootLogin = "yes";
     };
   };
