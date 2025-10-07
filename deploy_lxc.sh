@@ -68,6 +68,16 @@ generate_nixos_config() {
     "sys-fs-fuse-connections.mount"
   ];
 
+  # Enable Deduplication
+  nix.settings.auto-optimise-store = true;
+
+  # Enable Garbage Collector
+  nix.gc = {
+    automatic = true;
+    dates = "daily";
+    options = "--delete-older-than 7d";
+  };
+
   # Network configuration with static IP
   networking = {
     hostName = "$HOSTNAME";
